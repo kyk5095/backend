@@ -10,6 +10,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
@@ -83,15 +84,15 @@ class SettlementAdjustmentServiceTests {
                 .build();
         Page<SettlementAdjustment> mockPage = new PageImpl<>(List.of(mockAdjustment));
 
-        when(repository.findByConditions(franchiseId, type, pageable)).thenReturn(mockPage);
+        when(repository.findByConditions(franchiseId, type, null, pageable)).thenReturn(mockPage);
 
         // when
-        Page<SettlementAdjustment> result = adjustmentService.getAll(franchiseId, type, pageable);
+        Page<SettlementAdjustment> result = adjustmentService.getAll(franchiseId, type, null, pageable);
 
         // then
         assertThat(result.getTotalElements()).isEqualTo(1);
         assertThat(result.getContent().get(0).getSettlementAdjustmentId()).isEqualTo(100L);
-        verify(repository).findByConditions(franchiseId, type, pageable);
+        verify(repository).findByConditions(franchiseId, type, null, pageable);
     }
 
     @DisplayName("특정 조정 내역 단건 조회 - 실패 (데이터 없음)")

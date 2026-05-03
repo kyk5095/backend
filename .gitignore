@@ -58,3 +58,4 @@ docs
 **/generated-sources/
 **/build/
 **/out/
+**/minio_data/
