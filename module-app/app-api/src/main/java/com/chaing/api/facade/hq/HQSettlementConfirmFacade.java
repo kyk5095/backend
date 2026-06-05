@@ -19,6 +19,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import com.chaing.api.config.RedisCacheHelper;
 
 import java.math.BigDecimal;
 import java.time.YearMonth;
@@ -37,6 +38,7 @@ public class HQSettlementConfirmFacade {
     private final FranchiseRepository franchiseRepository;
     private final SettlementAdjustmentRepository adjustmentRepository;
     private final MonthlySettlementRepository monthlyRepo;
+    private final RedisCacheHelper redisCacheHelper;
 
     // 1. 상단 상태별 카운트 조회
     public HQConfirmStatusCountResponse getMonthlyStatusCounts(YearMonth month) {
@@ -130,18 +132,21 @@ public class HQSettlementConfirmFacade {
     public void requestConfirm(Long franchiseId, YearMonth month) {
         MonthlySettlement ms = getOrCreateMonthlySettlement(franchiseId, month);
         monthlyService.requestConfirm(ms.getMonthlySettlementId());
+        redisCacheHelper.evictByPattern("settlement:hq:*");
     }
 
     @Transactional
     public void finalizeConfirm(Long franchiseId, YearMonth month) {
         MonthlySettlement ms = getOrCreateMonthlySettlement(franchiseId, month);
         monthlyService.confirm(ms.getMonthlySettlementId());
+        redisCacheHelper.evictByPattern("settlement:hq:*");
     }
 
     @Transactional
     public void rollbackToDraft(Long franchiseId, YearMonth month) {
         MonthlySettlement ms = getOrCreateMonthlySettlement(franchiseId, month);
         monthlyService.rollback(ms.getMonthlySettlementId());
+        redisCacheHelper.evictByPattern("settlement:hq:*");
     }
 
     @Transactional
@@ -150,6 +155,7 @@ public class HQSettlementConfirmFacade {
         settlements.stream()
                 .filter(s -> s.getStatus() == SettlementStatus.CONFIRM_REQUESTED)
                 .forEach(s -> monthlyService.confirm(s.getMonthlySettlementId()));
+        redisCacheHelper.evictByPattern("settlement:hq:*");
     }
 
     private MonthlySettlement getOrCreateMonthlySettlement(Long franchiseId, YearMonth month) {

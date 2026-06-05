@@ -1214,94 +1214,100 @@ public class HQSettlementFacade {
             }
         }
         log.info("Daily Settlement Snapshot Batch completed. Success: {}/{}", successCount, franchises.size());
+        if (successCount > 0) {
+            redisCacheHelper.evictByPattern("settlement:hq:*");
+        }
     }
-
-    @Transactional
-    public void generateMonthlyReports(YearMonth month) {
-        log.info("Starting Monthly Settlement Report Batch for all franchises for month: {}", month);
-        List<Franchise> franchises = franchiseRepository.findAll();
-        int successCount = 0;
-        for (Franchise franchise : franchises) {
-            try {
-                // 월간 정산 데이터 집계 및 PDF 생성
-                generateOfficialMonthlyReport(franchise.getFranchiseId(), month);
-                successCount++;
-            } catch (Exception e) {
-                log.error("Failed to generate monthly report for franchise: {}", franchise.getFranchiseId(), e);
+        @Transactional
+        public void generateMonthlyReports (YearMonth month) {
+            log.info("Starting Monthly Settlement Report Batch for all franchises for month: {}", month);
+            List<Franchise> franchises = franchiseRepository.findAll();
+            int successCount = 0;
+            for (Franchise franchise : franchises) {
+                try {
+                    // 월간 정산 데이터 집계 및 PDF 생성
+                    generateOfficialMonthlyReport(franchise.getFranchiseId(), month);
+                    successCount++;
+                } catch (Exception e) {
+                    log.error("Failed to generate monthly report for franchise: {}", franchise.getFranchiseId(), e);
+                }
+            }
+            log.info("Monthly Settlement Report Batch completed. Success: {}/{}", successCount, franchises.size());
+            if (successCount > 0) {
+                redisCacheHelper.evictByPattern("settlement:hq:*");
             }
         }
-        log.info("Monthly Settlement Report Batch completed. Success: {}/{}", successCount, franchises.size());
-    }
 
-    private void generateOfficialMonthlyReport(Long franchiseId, YearMonth month) {
-        // 1. 해당 월의 일별 데이터 조회
-        LocalDate start = month.atDay(1);
-        LocalDate end = month.atEndOfMonth();
-        List<DailySettlementReceipt> receipts = dailyService.getAllByFranchiseAndDateRange(franchiseId, start, end);
+            private void generateOfficialMonthlyReport (Long franchiseId, YearMonth month){
+                // 1. 해당 월의 일별 데이터 조회
+                LocalDate start = month.atDay(1);
+                LocalDate end = month.atEndOfMonth();
+                List<DailySettlementReceipt> receipts = dailyService.getAllByFranchiseAndDateRange(franchiseId, start, end);
 
-        if (receipts.isEmpty()) {
-            log.warn("No settlement data found for franchise {} in month {}", franchiseId, month);
-            return;
+                if (receipts.isEmpty()) {
+                    log.warn("No settlement data found for franchise {} in month {}", franchiseId, month);
+                    return;
+                }
+
+                // 2. 월간 정산 객체 생성
+                MonthlySettlement monthlySettlement = aggregateMonthlySettlement(franchiseId, month, receipts);
+                monthlySettlement = monthlyService.save(monthlySettlement);
+
+                // 3. 바우처(전표) 목록 생성
+                List<SettlementVoucher> vouchers = receipts.stream()
+                        .map(r -> SettlementVoucher.builder()
+                                .voucherType(VoucherType.SALES)
+                                .amount(r.getFinalAmount())
+                                .description(r.getSettlementDate() + " 일별 정산 합계")
+                                .occurredAt(r.getSettlementDate().atStartOfDay())
+                                .build())
+                        .collect(Collectors.toList());
+
+                // 4. 가맹점명 조회
+                String franchiseName = franchiseRepository.findById(franchiseId)
+                        .map(Franchise::getName)
+                        .orElse("Unknown Store");
+
+                // 5. PDF 생성 및 업로드
+                byte[] pdfBytes = fileService.createMonthlyReceiptPdf(monthlySettlement, vouchers, franchiseName);
+                String pdfFileName = "settlement/reports/FR_" + franchiseId + "_" + month + ".pdf";
+                minioService.uploadFile(pdfBytes, pdfFileName, "application/pdf", BucketName.SETTLEMENTS);
+                String pdfUrl = minioService.getFileUrl(pdfFileName, BucketName.SETTLEMENTS);
+
+                // 6. DB에 문서 메타데이터 저장
+                documentService.save(SettlementDocument.builder()
+                        .periodType(PeriodType.MONTHLY)
+                        .documentType(DocumentType.RECEIPT_PDF)
+                        .documentOwner(DocumentOwner.FRANCHISE)
+                        .franchiseId(franchiseId)
+                        .monthlySettlementId(monthlySettlement.getMonthlySettlementId())
+                        .storageProvider("MINIO")
+                        .bucket(BucketName.SETTLEMENTS.getBucketName())
+                        .objectKey(pdfFileName)
+                        .fileUrl(pdfUrl)
+                        .fileName(pdfFileName.substring(pdfFileName.lastIndexOf("/") + 1))
+                        .contentType("application/pdf")
+                        .fileSize((long) pdfBytes.length)
+                        .build());
+            }
+
+            private <T > T readObjectCache(String key, Class < T > clazz) {
+                try {
+                    String cached = redisTemplate.opsForValue().get(key);
+                    if (cached == null) return null;
+                    return objectMapper.readValue(cached, clazz);
+                } catch (Exception e) {
+                    return null;
+                }
+            }
+
+            private void writeCache (String key, Object value){
+                try {
+                    redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), CACHE_TTL);
+                } catch (Exception ignored) {
+
+                }
+            }
         }
 
-        // 2. 월간 정산 객체 생성
-        MonthlySettlement monthlySettlement = aggregateMonthlySettlement(franchiseId, month, receipts);
-        monthlySettlement = monthlyService.save(monthlySettlement);
-
-        // 3. 바우처(전표) 목록 생성
-        List<SettlementVoucher> vouchers = receipts.stream()
-                .map(r -> SettlementVoucher.builder()
-                        .voucherType(VoucherType.SALES)
-                        .amount(r.getFinalAmount())
-                        .description(r.getSettlementDate() + " 일별 정산 합계")
-                        .occurredAt(r.getSettlementDate().atStartOfDay())
-                        .build())
-                .collect(Collectors.toList());
-
-        // 4. 가맹점명 조회
-        String franchiseName = franchiseRepository.findById(franchiseId)
-                .map(Franchise::getName)
-                .orElse("Unknown Store");
-
-        // 5. PDF 생성 및 업로드
-        byte[] pdfBytes = fileService.createMonthlyReceiptPdf(monthlySettlement, vouchers, franchiseName);
-        String pdfFileName = "settlement/reports/FR_" + franchiseId + "_" + month + ".pdf";
-        minioService.uploadFile(pdfBytes, pdfFileName, "application/pdf", BucketName.SETTLEMENTS);
-        String pdfUrl = minioService.getFileUrl(pdfFileName, BucketName.SETTLEMENTS);
-
-        // 6. DB에 문서 메타데이터 저장
-        documentService.save(SettlementDocument.builder()
-                .periodType(PeriodType.MONTHLY)
-                .documentType(DocumentType.RECEIPT_PDF)
-                .documentOwner(DocumentOwner.FRANCHISE)
-                .franchiseId(franchiseId)
-                .monthlySettlementId(monthlySettlement.getMonthlySettlementId())
-                .storageProvider("MINIO")
-                .bucket(BucketName.SETTLEMENTS.getBucketName())
-                .objectKey(pdfFileName)
-                .fileUrl(pdfUrl)
-                .fileName(pdfFileName.substring(pdfFileName.lastIndexOf("/") + 1))
-                .contentType("application/pdf")
-                .fileSize((long) pdfBytes.length)
-                .build());
-    }
-
-    private <T> T readObjectCache(String key, Class<T> clazz) {
-        try {
-            String cached = redisTemplate.opsForValue().get(key);
-            if (cached == null) return null;
-            return objectMapper.readValue(cached, clazz);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-    private void writeCache(String key, Object value) {
-        try {
-            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), CACHE_TTL);
-        } catch (Exception ignored) {
-
-        }
-    }
-}
 
