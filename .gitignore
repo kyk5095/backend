@@ -59,3 +59,5 @@ docs
 **/build/
 **/out/
 **/minio_data/
+
+docker-compose.yml

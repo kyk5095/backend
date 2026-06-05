@@ -1,5 +1,6 @@
 package com.chaing.api.facade.hq;
 
+import com.chaing.api.config.RedisCacheHelper;
 import com.chaing.api.dto.hq.settlement.request.HQSettlementAdjustmentListRequest;
 import com.chaing.api.dto.hq.settlement.request.HQSettlementAdjustmentVoucherRequest;
 import com.chaing.api.dto.hq.settlement.response.HQAdjustmentFranchiseResponse;
@@ -9,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -29,6 +31,7 @@ public class HQSettlementAdjustmentFacade {
         private final com.chaing.domain.users.repository.UserRepository userRepository;
         private final com.chaing.domain.settlements.repository.interfaces.MonthlySettlementRepository monthlySettlementRepository;
         private final com.chaing.domain.settlements.repository.interfaces.SettlementVoucherRepository settlementVoucherRepository;
+        private final RedisCacheHelper redisCacheHelper;
 
         // 1. 드롭다운용 가맹점 목록 조회
         public List<HQAdjustmentFranchiseResponse> getFranchisesForDropdown() {
@@ -69,7 +72,7 @@ public class HQSettlementAdjustmentFacade {
                                 ? amount
                                 : amount.negate();
 
-                // ⭐️ 추가: 기존 정산 전표(SettlementVoucher) 자동 조회 및 매핑
+                //  추가: 기존 정산 전표(SettlementVoucher) 자동 조회 및 매핑
                 java.time.YearMonth month = request.settlementMonth();
                 Long settlementVoucherId = monthlySettlementRepository
                                 .findByFranchiseIdAndSettlementMonth(request.franchiseId(), month)
@@ -77,7 +80,7 @@ public class HQSettlementAdjustmentFacade {
                                                 .findAllByMonthlySettlementId(m.getMonthlySettlementId()))
                                 .filter(list -> !list.isEmpty())
                                 .map(list -> list.get(0).getSettlementVoucherId())
-                                .orElse(null); // ⭐️ 수정: 전표가 없더라도 null로 설정하여 등록 허용
+                                .orElse(null); // 수정: 전표가 없더라도 null로 설정하여 등록 허용
 
                 com.chaing.domain.settlements.entity.SettlementAdjustment adjustment = com.chaing.domain.settlements.entity.SettlementAdjustment
                                 .builder()
@@ -96,6 +99,7 @@ public class HQSettlementAdjustmentFacade {
                                 .build();
 
                 adjustmentService.create(adjustment);
+                redisCacheHelper.evictByPattern("settlement:hq:*");
         }
 
         // 4. 조정 전표 목록 조회 (페이징)
@@ -130,7 +134,7 @@ public class HQSettlementAdjustmentFacade {
                                                                 : com.chaing.domain.settlements.enums.AdjustmentDirection.INCREASE,
                                                 a.getReason(),
                                                 a.getSettlementMonth(),
-                                                a.getReturnType())) // ⭐️ 응답에 반품 사유 포함
+                                                a.getReturnType())) //  응답에 반품 사유 포함
                                 .collect(Collectors.toList());
 
                 return new PageImpl<>(dtos, pageable, adjustments.getTotalElements());
