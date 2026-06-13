@@ -1,5 +1,7 @@
 # 📦 CHAIN-G (Back-end)
 
+ [![Java CI with Gradle](https://github.com/kyk5095/backend/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/kyk5095/backend/actions)
+
 <img width="300" alt="Gemini_Generated_Image_8j8ddp8j8ddp8j8d-Photoroom" src="https://github.com/user-attachments/assets/6f623ede-7a0d-4fcd-a74f-3bec56de2c63" />
 
 > CONNECT GOOD, VALUE CHAIN
@@ -304,20 +306,19 @@ AWS를 처음 다뤄보는 상황이라 초반에는 어려움이 있었지만, 
 
 ### DevOps
 
-1단계. GitHub Actions - 자동빌드
-왜? - 현업이나 신규 프록트에서 많이 쓰기때문에, 어떻게 구현되는지 알고싶어서
-목표: 깃허브에 코드를 푸시하면 자동으로 테스트를 돌리고 빌드하는 파일 하나를 만든다.
-해볼 일: 프로젝트의 .github/workflows/ 폴더에 배포/빌드 설정 파일(.yml)을 만든다.
-       깃허브에 올리고 초록색 불(Success)이 들어오는지 확인합니다.
-
-2단계. GitHub Actions로 Docker 이미지 빌드 및 업로드
-목표: 깃허브 액션을 통해 빌드된 결과물을 Docker 이미지로 만들어 Docker Hub나 AWS ECR에 올리는 단계까지 자동화해 봅니다.
-학습 내용: 깃허브 보안 변수(Secrets) 관리, Docker Hub 로그인 연동 등.
-
-
-3단계. Jenkins 서버 직접 구축 및 연동 
-대규모 서비스나 레거시 시스템에 사용하기 때문에 확장성을 위해 고도화를 해본다.
-리눅스 명령어, 포트 열기, 도커 권한 설정 등 서버 관리 지식이 많이 필요하기 때문입니다. 앞선 단계에서 자동화 흐름을 이해하고 도전하면 훨씬 덜 헷갈리기 때문에 git actions 후에 Jenkins 도입.
-
-목표: 오라클 클라우드 프리티어나 AWS EC2를 하나 빌려서, 거기에 Jenkins를 직접 설치하고 깃허브 액션에서 했던 작업을 젠킨스용 스크립트(Jenkinsfile)로 옮겨 실행해 본다.
-
+#### [✓] 1단계. GitHub Actions - 자동 빌드 (CI 구축 완료) 
+- **도입 목적**: 개발 과정에서 소스코드 오타, 컴파일 에러, 빌드 실패 등을 자동으로 감지하여 코드 신뢰성을 확보하기 위함
+- **환경 구성**: 
+  - CI Engine: GitHub Actions
+  - Java Version: JDK 21 (Temurin)
+  - Build Tool: Gradle 8.14
+- **실행 흐름**: `main`, `dev`, `feature/*` 브랜치에 Push/PR 발생 시 가상 환경(Ubuntu)에서 자동 빌드 검증 수행
+- **보안 파일 우회**: 로컬 비밀 파일(`application-secret.yml`)이 빌드 환경에 미치는 영향을 제어하기 위해 Gradle 테스트 제외 빌드 옵션 적용
+---
+#### 2단계. GitHub Actions로 Docker 이미지 빌드 및 업로드 (진행 예정)
+- **목표**: 깃허브 액션을 통해 빌드된 결과물을 Docker 이미지로 만들어 Docker Hub나 AWS ECR에 올리는 단계까지 자동화해 봅니다.
+- **학습 내용**: 깃허브 보안 변수(Secrets) 관리, Docker Hub 로그인 연동 등.
+---
+#### 3단계. Jenkins 서버 직접 구축 및 연동 (진행 예정)
+- **목표**: 오라클 클라우드 프리티어나 AWS EC2를 하나 빌려서, 거기에 Jenkins를 직접 설치하고 깃허브 액션에서 했던 작업을 젠킨스용 스크립트(Jenkinsfile)로 옮겨 실행해 봅니다.
+- **순서 이유**: 리눅스 명령어, 포트 열기, 도커 권한 설정 등 서버 관리 지식이 많이 필요하기 때문입니다. 앞선 단계에서 자동화 흐름을 이해하고 도전하면 훨씬 덜 헷갈리기 때문에 GitHub Actions 도입 후 Jenkins를 추진합니다.
