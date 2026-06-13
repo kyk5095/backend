@@ -1,0 +1,43 @@
+# 1. 이 워크플로우(로봇)의 이름
+name: Java CI with Gradle
+
+# 2. 언제 이 로봇을 작동시킬 것인가?
+on:
+  push:
+    branches: [ "main", "dev", "feature/*" ] # main, dev, feature/로 시작하는 브랜치에 코드가 push될 때
+  pull_request:
+    branches: [ "main", "dev" ]             # Pull Request가 열릴 때
+
+# 3. 로봇이 해야 할 일(Job) 정의
+jobs:
+  build:
+    # 깃허브가 제공하는 최신 Ubuntu 가상 컴퓨터에서 실행합니다.
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: 깃허브 가상 컴퓨터로 내 소스코드를 다운로드(체크아웃)합니다.
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Step 2: 빌드에 필요한 Java 21 환경을 설치합니다. (Chain-G는 Java 21 사용)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin' # 가장 널리 쓰이는 OpenJDK 배포판
+
+      # Step 3: 빌드 속도를 빠르게 하기 위해 Gradle 캐시 설정을 적용합니다.
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Step 4: 리눅스 환경에서 Gradle 실행 파일(gradlew)을 작동할 수 있도록 권한을 부여합니다.
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      # Step 5: Gradle로 프로젝트를 빌드합니다.
+      - name: Build with Gradle
+        run: ./gradlew build -x test # 테스트 코드 실행을 제외하고 우선 빌드만 확인합니다.
+        # 백엔드를 그냥 빌드하려고 하면 에러가 날 수 있다.
+        # 왜냐하면 실제 서버 데이터베이스 비밀번호 등이 담긴 application-secret.yml 파일은 깃허브에 올라가지 않도록 설정(.gitignore)되어 있기 때문
+        # 깃허브 가상 컴퓨터에는 이 비밀 파일이 없기 때문에 빌드 시 에러가 날 수 있다.
+        # 이를 해결하기 위해 설정 파일 마지막 줄에 **-x test**를 붙여 테스트 단계는 생략하고 소스코드에 오타나 빌드 오류가 없는지만 확인하도록 설정
