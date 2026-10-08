@@ -21,6 +21,9 @@ import org.springframework.mail.javamail.JavaMailSender;
     "jwt.expiration=3600000",
     "jwt.refresh-expiration=86400000",
     "spring.datasource.url=jdbc:h2:mem:testdb;NON_KEYWORDS=USER",
+    "spring.data.redis.host=localhost",
+    "spring.data.redis.port=7006",
+    "spring.data.redis.password=redispassword",
     "minio.endpoint=http://localhost:9000",
     "minio.external-url=http://localhost:9000",
     "minio.access-key=admin",
@@ -87,22 +90,32 @@ public class SettlementPerformanceTest {
         hqSettlementFacade.generateMonthlyReports(targetMonth);
         System.out.println("배치 작업 완료!");
 
-        System.out.println("\n>>> [STEP 3] 배치 결과 조회 방식(최적화) 측정 시작...");
-        stopWatch.start("Batch Result Lookup");
+        System.out.println("\n>>> [STEP 3] 배치 결과 조회 방식(최적화 - Cache Miss) 측정 시작...");
+        stopWatch.start("Batch Result Lookup (DB)");
         hqSettlementFacade.getMonthlySummary(request);
         stopWatch.stop();
         long batchTimeMillis = stopWatch.getLastTaskTimeMillis();
         System.out.println("배치 조회 방식 소요 시간: " + batchTimeMillis + " ms");
 
+        System.out.println("\n>>> [STEP 4] 레디스 캐시 조회 방식(추가 최적화 - Cache Hit) 측정 시작...");
+        stopWatch.start("Redis Cache Lookup (Hit)");
+        hqSettlementFacade.getMonthlySummary(request);
+        stopWatch.stop();
+        long cacheTimeMillis = stopWatch.getLastTaskTimeMillis();
+        System.out.println("레디스 캐시 조회 방식 소요 시간: " + cacheTimeMillis + " ms");
+
         System.out.println("\n" + "=".repeat(50));
         System.out.println("   [최종 결과 리포트]");
         System.out.println("=".repeat(50));
-        System.out.println("- 실시간 방식: " + realTimeMillis + " ms");
-        System.out.println("- 배치 방식: " + batchTimeMillis + " ms");
+        System.out.println("- 실시간 DB 합산 방식: " + realTimeMillis + " ms");
+        System.out.println("- 배치 DB 조회 방식 (Cache Miss): " + batchTimeMillis + " ms");
+        System.out.println("- 레디스 캐시 조회 방식 (Cache Hit): " + cacheTimeMillis + " ms");
         
-        if (realTimeMillis > batchTimeMillis) {
-            double improvement = ((double)(realTimeMillis - batchTimeMillis) / realTimeMillis) * 100;
-            System.out.printf("성능 개선율: %.2f%% 단축되었습니다! 🎉\n", improvement);
+        if (realTimeMillis > cacheTimeMillis) {
+            double DBimprovement = ((double)(realTimeMillis - batchTimeMillis) / realTimeMillis) * 100;
+            double Redisimprovement = ((double)(realTimeMillis - cacheTimeMillis) / realTimeMillis) * 100;
+            System.out.printf("성능 개선율 (실시간 -> 배치 DB): %.2f%% 단축되었습니다! 🎉\n", DBimprovement);
+            System.out.printf("성능 개선율 (실시간 -> 레디스): %.2f%% 단축되었습니다! 🚀\n", Redisimprovement);
         }
         System.out.println("=".repeat(50) + "\n");
     }
