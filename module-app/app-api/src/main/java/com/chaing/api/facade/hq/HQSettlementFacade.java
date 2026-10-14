@@ -100,11 +100,20 @@ public class HQSettlementFacade {
 
     @Transactional(readOnly = true)
     public HQSettlementSummaryResponse getDailySummary(HQSettlementDailySummaryRequest request) {
-        //캐시
         String cacheKey = "settlement:hq:summary:daily:" + request.date().toString();
+
+        // 1. [L1 LRU 캐시 확인] 내 책상 위 바구니 확인 (0.001ms, 네트워크 비용 0)
+        HQSettlementSummaryResponse localCached = lruCache.get(cacheKey);
+        if (localCached != null) {
+            log.info("[LRU L1 HIT] getDailySummary hit for key: {}", cacheKey);
+            return localCached;
+        }
+
+        // 2. [L2 Redis 캐시 확인] 바구니에 없으면 옆 사무실(Redis) 확인
         HQSettlementSummaryResponse cached = readObjectCache(cacheKey, HQSettlementSummaryResponse.class);
         if (cached != null) {
-            log.info("[REDIS HIT] getDailySummary hit for key: {}", cacheKey);
+            log.info("[REDIS L2 HIT] getDailySummary hit for key: {}", cacheKey);
+            lruCache.put(cacheKey, cached); // 다음을 위해 내 바구니에도 쏙 넣어둠
             return cached;
         }
 
@@ -143,7 +152,8 @@ public class HQSettlementFacade {
         HQSettlementSummaryResponse response = HQSettlementSummaryResponse.of(hqTotalFinal, totalOrder, totalSale, totalCommission,
                 totalDelivery, totalRefund, totalLoss, totalAdjustment);
 
-        writeCache(cacheKey, response);
+        writeCache(cacheKey, response); // Redis에 저장
+        lruCache.put(cacheKey, response); // 내 바구니에도 저장
         return response;
 
     }
