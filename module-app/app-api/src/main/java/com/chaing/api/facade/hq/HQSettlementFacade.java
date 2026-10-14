@@ -45,6 +45,7 @@ import com.chaing.domain.returns.repository.FranchiseReturnItemRepository;
 import com.chaing.domain.returns.repository.FranchiseReturnRepository;
 import com.chaing.domain.settlements.entity.SettlementVoucher;
 import com.chaing.api.config.RedisCacheHelper;
+import com.chaing.api.util.LruCache;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.time.Duration;
@@ -91,6 +92,9 @@ public class HQSettlementFacade {
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
     private static final Duration CACHE_TTL = Duration.ofMinutes(10); // 정산 요약은 자주 변하지 않으므로 10분 TTL 설정
+
+    // L1 인메모리 LRU 캐시 (자주 조회되는 본사 정산 요약 50건을 메모리에 보관)
+    private final LruCache<String, HQSettlementSummaryResponse> lruCache = new LruCache<>(50);
 
     // 1. 일별 조회
 
