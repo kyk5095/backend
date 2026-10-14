@@ -1240,6 +1240,7 @@ public class HQSettlementFacade {
         log.info("Daily Settlement Snapshot Batch completed. Success: {}/{}", successCount, franchises.size());
         if (successCount > 0) {
             redisCacheHelper.evictByPattern("settlement:hq:*");
+            lruCache.clear(); // 데이터 갱신 시 로컬 L1 캐시도 함께 비워 정합성 유지
         }
     }
         @Transactional
@@ -1259,6 +1260,7 @@ public class HQSettlementFacade {
             log.info("Monthly Settlement Report Batch completed. Success: {}/{}", successCount, franchises.size());
             if (successCount > 0) {
                 redisCacheHelper.evictByPattern("settlement:hq:*");
+                lruCache.clear(); // 데이터 갱신 시 로컬 L1 캐시도 함께 비워 정합성 유지
             }
         }
 
