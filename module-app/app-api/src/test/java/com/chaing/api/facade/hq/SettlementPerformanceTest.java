@@ -97,25 +97,36 @@ public class SettlementPerformanceTest {
         long batchTimeMillis = stopWatch.getLastTaskTimeMillis();
         System.out.println("배치 조회 방식 소요 시간: " + batchTimeMillis + " ms");
 
-        System.out.println("\n>>> [STEP 4] 레디스 캐시 조회 방식(추가 최적화 - Cache Hit) 측정 시작...");
-        stopWatch.start("Redis Cache Lookup (Hit)");
+        System.out.println("\n>>> [STEP 4] 로컬 LRU 캐시 조회 방식(L1 Cache Hit) 측정 시작...");
+        stopWatch.start("Local LRU Cache Lookup (L1 Hit)");
         hqSettlementFacade.getMonthlySummary(request);
         stopWatch.stop();
-        long cacheTimeMillis = stopWatch.getLastTaskTimeMillis();
-        System.out.println("레디스 캐시 조회 방식 소요 시간: " + cacheTimeMillis + " ms");
+        long lruTimeMillis = stopWatch.getLastTaskTimeMillis();
+        System.out.println("로컬 LRU 캐시 방식 소요 시간: " + lruTimeMillis + " ms");
+
+        hqSettlementFacade.clearLocalCache(); // 로컬 바구니만 비워 레디스 네트워크 Hit 유도
+        System.out.println("\n>>> [STEP 5] 레디스 캐시 조회 방식(L2 Cache Hit) 측정 시작...");
+        stopWatch.start("Redis Cache Lookup (L2 Hit)");
+        hqSettlementFacade.getMonthlySummary(request);
+        stopWatch.stop();
+        long redisTimeMillis = stopWatch.getLastTaskTimeMillis();
+        System.out.println("레디스 캐시 방식 소요 시간: " + redisTimeMillis + " ms");
 
         System.out.println("\n" + "=".repeat(50));
-        System.out.println("   [최종 결과 리포트]");
+        System.out.println("   [최종 성능 비교 결과 리포트]");
         System.out.println("=".repeat(50));
-        System.out.println("- 실시간 DB 합산 방식: " + realTimeMillis + " ms");
-        System.out.println("- 배치 DB 조회 방식 (Cache Miss): " + batchTimeMillis + " ms");
-        System.out.println("- 레디스 캐시 조회 방식 (Cache Hit): " + cacheTimeMillis + " ms");
-        
-        if (realTimeMillis > cacheTimeMillis) {
+        System.out.println("- 1. 실시간 DB 합산 방식: " + realTimeMillis + " ms");
+        System.out.println("- 2. 배치 DB 조회 방식 (Cache Miss): " + batchTimeMillis + " ms");
+        System.out.println("- 3. L2 레디스 캐시 방식 (Redis Hit): " + redisTimeMillis + " ms");
+        System.out.println("- 4. L1 로컬 LRU 캐시 방식 (LRU Hit): " + lruTimeMillis + " ms");
+
+        if (realTimeMillis > 0) {
             double DBimprovement = ((double)(realTimeMillis - batchTimeMillis) / realTimeMillis) * 100;
-            double Redisimprovement = ((double)(realTimeMillis - cacheTimeMillis) / realTimeMillis) * 100;
-            System.out.printf("성능 개선율 (실시간 -> 배치 DB): %.2f%% 단축되었습니다! 🎉\n", DBimprovement);
-            System.out.printf("성능 개선율 (실시간 -> 레디스): %.2f%% 단축되었습니다! 🚀\n", Redisimprovement);
+            double Redisimprovement = ((double)(realTimeMillis - redisTimeMillis) / realTimeMillis) * 100;
+            double Lruimprovement = ((double)(realTimeMillis - lruTimeMillis) / realTimeMillis) * 100;
+            System.out.printf("성능 개선율 (실시간 -> 배치 DB): %.2f%% 단축! 🎉\n", DBimprovement);
+            System.out.printf("성능 개선율 (실시간 -> 레디스 L2): %.2f%% 단축! 🚀\n", Redisimprovement);
+            System.out.printf("성능 개선율 (실시간 -> LRU 캐시 L1): %.2f%% 단축! ⚡⚡\n", Lruimprovement);
         }
         System.out.println("=".repeat(50) + "\n");
     }

@@ -1317,6 +1317,10 @@ public class HQSettlementFacade {
                         .build());
             }
 
+            public void clearLocalCache() {
+                lruCache.clear();
+            }
+
             private <T > T readObjectCache(String key, Class < T > clazz) {
                 try {
                     String cached = redisTemplate.opsForValue().get(key);
